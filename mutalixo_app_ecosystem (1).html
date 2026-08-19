@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MutaLixo - Ecossistema do Lixo à Energia</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        emerald: {
+                            400: '#34d399',
+                            500: '#10b981',
+                            600: '#059669',
+                        },
+                        cyan: {
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- React, ReactDOM, Babel, Chart.js & Lucide Icons -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Font Family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #030712;
+            color: #f3f4f6;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-card-hover:hover {
+            border-color: rgba(16, 185, 129, 0.3);
+            box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.15);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #10b981;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function MutaLixoApp() {
+            const [activeTab, setActiveTab] = useState('citizen');
+            
+            // Eco Wallet & Rewards State
+            const [mutacoins, setMutacoins] = useState(1450);
+            const [history, setHistory] = useState([
+                { id: 1, date: '18/08/2026', type: 'Descarte PEAD', kg: 25, points: '+250 pts', status: 'Processado' },
+                { id: 2, date: '12/08/2026', type: 'Descarte PP', kg: 40, points: '+400 pts', status: 'Processado' },
+                { id: 3, date: '05/08/2026', type: 'Resgate Desconto Energia', kg: 0, points: '-500 pts', status: 'Aplicado' },
+            ]);
+
+            // Citizen Calculator & Collection State
+            const [plasticKg, setPlasticKg] = useState(60);
+            const [plasticType, setPlasticType] = useState('PEAD');
+            const [pickupAddress, setPickupAddress] = useState('Rua Sustentável, 100 - Bairro Verde');
+            const [scheduleSuccess, setScheduleSuccess] = useState(false);
+
+            // SCADA & PLC Machine Control State
+            const [feedRate, setFeedRate] = useState(45); // kg/h
+            const [burnerIntensity, setBurnerIntensity] = useState(78); // %
+            const [targetTemp, setTargetTemp] = useState(420); // °C
+            const [coolingFlow, setCoolingFlow] = useState(65); // %
+            const [pressureValve, setPressureValve] = useState(1.15); // bar
+            const [controlMode, setControlMode] = useState('AUTO'); // 'AUTO' | 'MANUAL'
+            const [isEStopped, setIsEStopped] = useState(false);
+            const [systemAlarm, setSystemAlarm] = useState(null);
+            
+            // Telemetry values calculated dynamically
+            const [reactorTemp, setReactorTemp] = useState(422.4);
+            const [powerOutput, setPowerOutput] = useState(82.3);
+            const [gasFlow, setGasFlow] = useState(118.5);
+
+            const [scadaLogs, setScadaLogs] = useState([
+                '[SCADA] Sistema MutaLixo PLC v3.2 Conectado ao Reator #1',
+                '[MODBUS] Comunicação com inversores de frequência OK',
+                '[PID] Módulo de temperatura calibrado em 420°C'
+            ]);
+
+            // AI Vision Computer Vision Simulator
+            const [selectedImageSample, setSelectedImageSample] = useState(null);
+            const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+            const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+
+            // Gemini Chatbot State
+            const [chatMessages, setChatMessages] = useState([
+                { sender: 'bot', text: 'Olá! Sou o Assistente Virtual MutaLixo powered by Gemini AI. Como posso te ajudar com a triagem de plásticos ou com o processo de pirólise hoje?' }
+            ]);
+            const [inputPrompt, setInputPrompt] = useState('');
+            const [isAiLoading, setIsAiLoading] = useState(false);
+
+            // Chart References
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
+            const addLog = (msg) => {
+                setScadaLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev.slice(0, 9)]);
+            };
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    if (isEStopped) {
+                        setReactorTemp(prev => Math.max(25, +(prev - 4.5).toFixed(1)));
+                        setPowerOutput(0);
+                        setGasFlow(0);
+                        return;
+                    }
+
+                    // Physics feedback simulation
+                    setReactorTemp(prev => {
+                        let target = controlMode === 'AUTO' ? targetTemp : (burnerIntensity * 5) - (feedRate * 0.7);
+                        let diff = (target - prev) * 0.12;
+                        let nextTemp = +(prev + diff + (Math.random() * 1.8 - 0.9)).toFixed(1);
+
+                        if (nextTemp > 465) {
+                            setSystemAlarm('⚠️ ALERTA: Alta Temperatura no Reator! Ativando resfriamento forçado.');
+                        } else if (nextTemp < 320 && feedRate > 15) {
+                            setSystemAlarm('⚠️ ATENÇÃO: Temperatura baixa para a taxa de alimentação atual.');
+                        } else {
+                            setSystemAlarm(null);
+                        }
+
+                        return nextTemp;
+                    });
+
+                    setPowerOutput(() => {
+                        if (reactorTemp < 300) return 0;
+                        let output = (feedRate * 1.82) * (reactorTemp / 410);
+                        return +Math.min(160, Math.max(0, output + (Math.random() - 0.5))).toFixed(1);
+                    });
+
+                    setGasFlow(() => {
+                        if (reactorTemp < 280) return 0;
+                        let flow = (feedRate * 2.3) * (burnerIntensity / 75);
+                        return +Math.max(0, flow + (Math.random() * 3 - 1.5)).toFixed(1);
+                    });
+
+                }, 2000);
+                return () => clearInterval(interval);
+            }, [isEStopped, burnerIntensity, feedRate, targetTemp, controlMode, reactorTemp]);
+
+            useEffect(() => {
+                if (activeTab === 'scada' && chartRef.current) {
+                    if (chartInstance.current) chartInstance.current.destroy();
+
+                    const ctx = chartRef.current.getContext('2d');
+                    chartInstance.current = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['10m atrás', '8m atrás', '6m atrás', '4m atrás', '2m atrás', 'Agora'],
+                            datasets: [
+                                {
+                                    label: 'Temperatura Reator (°C)',
+                                    data: [410, 415, 418, 420, 421, reactorTemp],
+                                    borderColor: '#ef4444',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Potência Gerada (kW)',
+                                    data: [72, 75, 78, 80, 81, powerOutput],
+                                    borderColor: '#10b981',
+                                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { labels: { color: '#9ca3af' } }
+                            },
+                            scales: {
+                                x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
+                                y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }
+                            }
+                        }
+                    });
+                }
+            }, [activeTab, reactorTemp, powerOutput]);
+
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [activeTab, isEStopped, systemAlarm, aiAnalysisResult, chatMessages]);
+
+            const calculateYields = () => {
+                const factors = {
+                    PEAD: { kwh: 1.85, co2: 2.1, points: 10 },
+                    PEBD: { kwh: 1.75, co2: 1.9, points: 10 },
+                    PP:   { kwh: 1.90, co2: 2.2, points: 12 },
+                    MISTO: { kwh: 1.50, co2: 1.6, points: 8 }
+                };
+                const factor = factors[plasticType] || factors.PEAD;
+                return {
+                    kwh: (plasticKg * factor.kwh).toFixed(1),
+                    co2Saved: (plasticKg * factor.co2).toFixed(1),
+                    points: Math.floor(plasticKg * factor.points)
+                };
+            };
+
+            const yieldStats = calculateYields();
+
+            const handleSendMessage = async () => {
+                if (!inputPrompt.trim()) return;
+
+                const userText = inputPrompt;
+                setChatMessages(prev => [...prev, { sender: 'user', text: userText }]);
+                setInputPrompt('');
+                setIsAiLoading(true);
+
+                try {
+                    const systemPrompt = "Você é o assistente oficial do ecossistema MutaLixo. Responda de forma clara, amigável e técnica sobre reciclagem de plásticos (PEAD, PEBD, PP, PET, PVC), processos de pirólise (quebra térmica de polímeros sem oxigênio para gerar energia/óleo) e sustentabilidade.";
+                    const apiKey = ""; // Canvas runtime environment automatically provides key
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                    const payload = {
+                        contents: [{ parts: [{ text: userText }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const data = await response.json();
+                    const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, tive um problema ao consultar a inteligência do MutaLixo. Tente novamente.";
+                    
+                    setChatMessages(prev => [...prev, { sender: 'bot', text: replyText }]);
+                } catch (err) {
+                    setChatMessages(prev => [...prev, { sender: 'bot', text: "Erro ao conectar com o serviço MutaLixo AI. Verifique sua conexão." }]);
+                } finally {
+                    setIsAiLoading(false);
+                }
+            };
+
+            const runAiVisionScan = (sampleType) => {
+                setSelectedImageSample(sampleType);
+                setIsAnalyzingImage(true);
+                setAiAnalysisResult(null);
+
+                setTimeout(() => {
+                    setIsAnalyzingImage(false);
+                    if (sampleType === 'clean_pead') {
+                        setAiAnalysisResult({
+                            status: 'APPROVED',
+                            polymer: 'PEAD (Polietileno de Alta Densidade)',
+                            confidence: '98.4%',
+                            purity: '96%',
+                            contamination: 'Baixa (Sem PVC/Metais)',
+                            message: 'Lote APTO para alimentação direta no Reator de Pirólise.'
+                        });
+                    } else if (sampleType === 'mixed_dirty') {
+                        setAiAnalysisResult({
+                            status: 'WARNING',
+                            polymer: 'Mistura PEBD / PP com resíduos orgânicos',
+                            confidence: '92.1%',
+                            purity: '78%',
+                            contamination: 'Moderada (Exige lavagem/secagem rápida)',
+                            message: 'Lote liberado apenas após pré-triagem.'
+                        });
+                    } else if (sampleType === 'pvc_hazard') {
+                        setAiAnalysisResult({
+                            status: 'REJECTED',
+                            polymer: 'PVC Identificado (Cloreto de Polivinila)',
+                            confidence: '99.1%',
+                            purity: 'N/A',
+                            contamination: 'CRÍTICA - Risco de Cloro/Ácido Clorídrico',
+                            message: 'LOTE REJEITADO! PVC danifica a usina e libera gases corrosivos.'
+                        });
+                    }
+                }, 1500);
+            };
+
+            return (
+                <div class="flex h-screen overflow-hidden bg-slate-950">
+
+                    {/* Sidebar Navigation */}
+                    <aside class="w-64 bg-slate-900/90 border-r border-slate-800 flex flex-col justify-between hidden md:flex z-20">
+                        <div class="p-5">
+                            {/* Brand Header */}
+                            <div class="flex items-center gap-3 mb-8">
+                                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                    <i data-lucide="recycle" class="w-6 h-6 text-slate-950 font-bold"></i>
+                                </div>
+                                <div>
+                                    <h1 class="text-xl font-black tracking-wider text-white">MutaLixo</h1>
+                                    <span class="text-[10px] text-emerald-400 font-mono tracking-widest uppercase block">Lixo ➔ Energia</span>
+                                </div>
+                            </div>
+
+                            {/* Eco Wallet Widget */}
+                            <div class="glass-card p-4 rounded-xl mb-6 border border-emerald-500/20 bg-emerald-950/20">
+                                <div class="flex justify-between items-center text-xs text-slate-400 mb-1">
+                                    <span>Sua Carteira</span>
+                                    <span class="text-emerald-400 font-semibold">EcoPontos</span>
+                                </div>
+                                <div class="text-2xl font-extrabold text-white flex items-center gap-1.5">
+                                    🪙 {mutacoins} <span class="text-xs font-normal text-slate-400">MutaCoins</span>
+                                </div>
+                            </div>
+
+                            {/* Nav Buttons */}
+                            <nav class="space-y-1.5">
+                                <button 
+                                    onClick={() => setActiveTab('citizen')}
+                                    class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${activeTab === 'citizen' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'}`}
+                                >
+                                    <i data-lucide="calculator" class="w-5 h-5"></i>
+                                    1. Cidadão & Coleta
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('scada')}
+                                    class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${activeTab === 'scada' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'}`}
+                                >
+                                    <i data-lucide="activity" class="w-5 h-5"></i>
+                                    2. Controle SCADA/IoT
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('logistics')}
+                                    class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${activeTab === 'logistics' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'}`}
+                                >
+                                    <i data-lucide="truck" class="w-5 h-5"></i>
+                                    3. Logística & IA Scan
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('esg')}
+                                    class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${activeTab === 'esg' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'}`}
+                                >
+                                    <i data-lucide="building-2" class="w-5 h-5"></i>
+                                    4. Módulo ESG & Cidade
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('ai_assistant')}
+                                    class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${activeTab === 'ai_assistant' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'}`}
+                                >
+                                    <i data-lucide="bot" class="w-5 h-5"></i>
+                                    5. Assistente Gemini AI
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Footer info */}
+                        <div class="p-5 border-t border-slate-800 text-xs text-slate-500">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span class="text-slate-300 font-medium">Usina MutaLixo #1 Ativa</span>
+                            </div>
+                            <p>Status: Operação Contínua</p>
+                        </div>
+                    </aside>
+
+                    {/* Main Content Scroll Area */}
+                    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+
+                        {}
+                        <div class="md:hidden flex overflow-x-auto gap-2 pb-4 mb-4 border-b border-slate-800 text-xs no-scrollbar">
+                            <button onClick={() => setActiveTab('citizen')} class={`px-3 py-2 rounded-lg whitespace-nowrap ${activeTab === 'citizen' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>Cidadão</button>
+                            <button onClick={() => setActiveTab('scada')} class={`px-3 py-2 rounded-lg whitespace-nowrap ${activeTab === 'scada' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>SCADA/IoT</button>
+                            <button onClick={() => setActiveTab('logistics')} class={`px-3 py-2 rounded-lg whitespace-nowrap ${activeTab === 'logistics' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>Logística/IA</button>
+                            <button onClick={() => setActiveTab('esg')} class={`px-3 py-2 rounded-lg whitespace-nowrap ${activeTab === 'esg' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>ESG</button>
+                            <button onClick={() => setActiveTab('ai_assistant')} class={`px-3 py-2 rounded-lg whitespace-nowrap ${activeTab === 'ai_assistant' ? 'bg-emerald-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'}`}>Gemini AI</button>
+                        </div>
+
+                        {}
+                        {activeTab === 'citizen' && (
+                            <div class="max-w-5xl mx-auto space-y-8">
+                                <div>
+                                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-2 border border-emerald-500/20">
+                                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Módulo Cidadão & Economia Circular
+                                    </div>
+                                    <h2 class="text-3xl font-extrabold text-white">Transforme seu Plástico em Energia Limpa</h2>
+                                    <p class="text-slate-400 text-sm mt-1">Calcule o impacto do seu descarte, agende a coleta em casa ou encontre o Ecoponto MutaLixo mais próximo.</p>
+                                </div>
+
+                                {/* Dynamic Yield Banner Cards */}
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800 relative overflow-hidden group hover:border-emerald-500/40 transition">
+                                        <div class="text-amber-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <i data-lucide="zap" class="w-4 h-4"></i> Energia Estimada
+                                        </div>
+                                        <div class="text-4xl font-black text-white">{yieldStats.kwh} <span class="text-base text-slate-400 font-normal">kWh</span></div>
+                                        <p class="text-xs text-slate-400 mt-2">Suficiente para abastecer uma residência média por <strong class="text-emerald-400">{(yieldStats.kwh / 5.5).toFixed(1)} dias</strong>.</p>
+                                    </div>
+
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800 relative overflow-hidden group hover:border-emerald-500/40 transition">
+                                        <div class="text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <i data-lucide="leaf" class="w-4 h-4"></i> CO₂ Evitado
+                                        </div>
+                                        <div class="text-4xl font-black text-white">{yieldStats.co2Saved} <span class="text-base text-slate-400 font-normal">kg CO₂</span></div>
+                                        <p class="text-xs text-slate-400 mt-2">Equivalente a plantar <strong class="text-emerald-400">{(yieldStats.co2Saved / 12).toFixed(1)} árvores</strong> no planeta.</p>
+                                    </div>
+
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800 relative overflow-hidden group hover:border-emerald-500/40 transition">
+                                        <div class="text-cyan-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <i data-lucide="coins" class="w-4 h-4"></i> EcoPontos Gerados
+                                        </div>
+                                        <div class="text-4xl font-black text-white">+{yieldStats.points} <span class="text-base text-slate-400 font-normal">MutaCoins</span></div>
+                                        <p class="text-xs text-slate-400 mt-2">Creditados na sua carteira imediatamente na pesagem.</p>
+                                    </div>
+                                </div>
+
+                                {/* Calculator & Form Controls */}
+                                <div class="glass-card p-7 rounded-2xl space-y-6">
+                                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                        <i data-lucide="sliders" class="w-5 h-5 text-emerald-400"></i>
+                                        Simulador & Solicitação de Coleta
+                                    </h3>
+
+                                    <div>
+                                        <div class="flex justify-between items-center text-sm font-medium mb-2">
+                                            <span class="text-slate-300">Quantidade Estimada de Plástico:</span>
+                                            <span class="text-emerald-400 font-bold text-base">{plasticKg} kg</span>
+                                        </div>
+                                        <input 
+                                            type="range" 
+                                            min="5" 
+                                            max="500" 
+                                            step="5"
+                                            value={plasticKg}
+                                            onChange={(e) => setPlasticKg(Number(e.target.value))}
+                                            class="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                        />
+                                        <div class="flex justify-between text-xs text-slate-500 mt-1">
+                                            <span>5 kg (Residencial)</span>
+                                            <span>100 kg (Condomínio)</span>
+                                            <span>500 kg (Empresa / Indústria)</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase text-slate-400 mb-2">Tipo de Plástico Predominante</label>
+                                            <select 
+                                                value={plasticType}
+                                                onChange={(e) => setPlasticType(e.target.value)}
+                                                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3.5 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
+                                            >
+                                                <option value="PEAD">PEAD - Frascos rígidos, tampinhas, baldes (Alto Valor Calorífico)</option>
+                                                <option value="PEBD">PEBD - Sacolas, plásticos bolha, filmes transparentes</option>
+                                                <option value="PP">PP - Potes de sorvete, margarina, copos plásticos</option>
+                                                <option value="MISTO">Mistura de Plásticos Triados</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase text-slate-400 mb-2">Endereço de Retirada</label>
+                                            <input 
+                                                type="text" 
+                                                value={pickupAddress}
+                                                onChange={(e) => setPickupAddress(e.target.value)}
+                                                class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3.5 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
+                                                placeholder="Sua rua, número e bairro"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => {
+                                            setScheduleSuccess(true);
+                                            setMutacoins(prev => prev + yieldStats.points);
+                                            setHistory(prev => [
+                                                { id: Date.now(), date: new Date().toLocaleDateString('pt-BR'), type: `Coleta ${plasticType}`, kg: plasticKg, points: `+${yieldStats.points} pts`, status: 'Agendado' },
+                                                ...prev
+                                            ]);
+                                            setTimeout(() => setScheduleSuccess(false), 5000);
+                                        }}
+                                        class="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 font-extrabold text-slate-950 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                                    >
+                                        <i data-lucide="truck" class="w-5 h-5"></i>
+                                        Agendar "Uber do Lixo Plástico" & Receber MutaCoins
+                                    </button>
+
+                                    {scheduleSuccess && (
+                                        <div class="p-4 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-sm flex items-center gap-3 animate-fade-in">
+                                            <i data-lucide="check-circle-2" class="w-6 h-6 text-emerald-400 flex-shrink-0"></i>
+                                            <div>
+                                                <strong class="block font-bold">Solicitação enviada com sucesso!</strong>
+                                                <span>Sua oferta de {plasticKg}kg de plástico foi enviada à cooperativa parceira MutaLixo. Os MutaCoins foram pré-creditados!</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Traceability Section "Do Lixo à Lâmpada" */}
+                                <div class="glass-card p-6 rounded-2xl space-y-4">
+                                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                        <i data-lucide="route" class="w-5 h-5 text-emerald-400"></i>
+                                        Rastreabilidade MutaLixo: "Do Lixo à Lâmpada"
+                                    </h3>
+
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                                        <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
+                                            <div class="text-2xl mb-1">📦</div>
+                                            <div class="text-xs font-bold text-white">1. Coleta na Porta</div>
+                                            <div class="text-[11px] text-slate-400 mt-1">Sua sacola de {plasticKg}kg agendada</div>
+                                        </div>
+                                        <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
+                                            <div class="text-2xl mb-1">⚖️</div>
+                                            <div class="text-xs font-bold text-white">2. Pesagem Digital</div>
+                                            <div class="text-[11px] text-slate-400 mt-1">Balança Bluetooth valida peso</div>
+                                        </div>
+                                        <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
+                                            <div class="text-2xl mb-1">🔥</div>
+                                            <div class="text-xs font-bold text-white">3. Pirólise na Usina</div>
+                                            <div class="text-[11px] text-slate-400 mt-1">Conversão molecular a 420°C</div>
+                                        </div>
+                                        <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
+                                            <div class="text-2xl mb-1">💡</div>
+                                            <div class="text-xs font-bold text-white">4. Luz na Praça Pública</div>
+                                            <div class="text-[11px] text-emerald-400 font-bold mt-1">Gera {yieldStats.kwh} kWh na rede</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {activeTab === 'scada' && (
+                            <div class="max-w-6xl mx-auto space-y-8">
+                                <div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                    <div>
+                                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-xs font-semibold mb-2 border border-red-500/20">
+                                            <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Telemetria SCADA & Automação PLC
+                                        </div>
+                                        <h2 class="text-3xl font-extrabold text-white">Interface Homem-Máquina (HMI Reator #1)</h2>
+                                        <p class="text-slate-400 text-sm mt-1">Monitoramento em tempo real da câmara de pirólise anaeróbica e condensador de síngás.</p>
+                                    </div>
+
+                                    {/* Emergency Stop Button */}
+                                    <button 
+                                        onClick={() => {
+                                            const nextState = !isEStopped;
+                                            setIsEStopped(nextState);
+                                            addLog(nextState ? '🚨 BOTÃO DE EMERGÊNCIA ATIVADO! Carga interrompida.' : '✅ Parada de emergência desativada. Reassumindo controle.');
+                                        }}
+                                        class={`px-6 py-3.5 rounded-xl font-bold text-sm tracking-wider transition shadow-lg flex items-center gap-2.5 ${isEStopped ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 shadow-emerald-500/20' : 'bg-red-600 hover:bg-red-700 text-white shadow-red-600/30 animate-pulse'}`}
+                                    >
+                                        <i data-lucide="power" class="w-5 h-5"></i>
+                                        {isEStopped ? 'REARMAR USINA' : 'E-STOP (PARADA DE EMERGÊNCIA)'}
+                                    </button>
+                                </div>
+
+                                {systemAlarm && (
+                                    <div class="p-4 bg-amber-500/15 border border-amber-500/40 text-amber-200 rounded-xl text-sm flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 flex-shrink-0"></i>
+                                            <span class="font-medium">{systemAlarm}</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                setCoolingFlow(85);
+                                                addLog('Auto-intervenção: Fluxo do condensador aumentado para 85%');
+                                            }} 
+                                            class="px-3 py-1.5 bg-amber-500/30 hover:bg-amber-500/40 text-amber-100 text-xs rounded-lg font-bold transition"
+                                        >
+                                            Corrigir Parâmetros
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Interactive Reactor Process Diagram */}
+                                <div class="glass-card p-6 rounded-2xl border border-slate-800 space-y-4">
+                                    <div class="flex justify-between items-center">
+                                        <h3 class="text-xs font-mono font-bold uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                                            <i data-lucide="workflow" class="w-4 h-4 text-emerald-400"></i>
+                                            Fluxograma Físico do Processo em Tempo Real
+                                        </h3>
+                                        <div class="flex gap-2 text-xs">
+                                            <button 
+                                                onClick={() => {
+                                                    setTargetTemp(420);
+                                                    setFeedRate(45);
+                                                    setBurnerIntensity(80);
+                                                    setControlMode('AUTO');
+                                                    addLog('Preset Aplicado: Curva Térmica PEAD/PP (420°C)');
+                                                }}
+                                                class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg border border-slate-700 font-mono"
+                                            >
+                                                Preset PEAD/PP
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    setTargetTemp(390);
+                                                    setFeedRate(25);
+                                                    setBurnerIntensity(60);
+                                                    setControlMode('AUTO');
+                                                    addLog('Preset Aplicado: Modo Carga Baixa Economia');
+                                                }}
+                                                class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg border border-slate-700 font-mono"
+                                            >
+                                                Preset Carga Eco
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Animated Diagram Modules */}
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                                        <div class="p-5 bg-slate-950/80 rounded-xl border border-slate-800 relative">
+                                            <div class="text-xs font-mono text-slate-400 mb-2">1. ROSCA ALIMENTADORA</div>
+                                            <div class="text-3xl mb-2">📦</div>
+                                            <div class="text-xl font-bold text-amber-400 font-mono">{isEStopped ? 0 : feedRate} kg/h</div>
+                                            <div class="text-[10px] text-slate-500 mt-1">Carga de Plástico Triado</div>
+                                            <div class={`mt-3 mx-auto w-2 h-2 rounded-full ${feedRate > 0 && !isEStopped ? 'bg-emerald-400 animate-ping' : 'bg-slate-700'}`}></div>
+                                        </div>
+
+                                        <div class="p-5 bg-slate-950/80 rounded-xl border border-slate-800 relative">
+                                            <div class="text-xs font-mono text-slate-400 mb-2">2. REATOR DE PIRÓLISE</div>
+                                            <div class={`text-3xl mb-2 transition-all ${reactorTemp > 400 ? 'scale-110 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]' : ''}`}>🔥</div>
+                                            <div class="text-xl font-bold text-red-400 font-mono">{reactorTemp} °C</div>
+                                            <div class="text-[10px] text-slate-500 mt-1">Pressão: {pressureValve} bar (Sem O₂)</div>
+                                            <div class={`mt-3 mx-auto w-2 h-2 rounded-full ${reactorTemp > 350 ? 'bg-red-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                                        </div>
+
+                                        <div class="p-5 bg-slate-950/80 rounded-xl border border-slate-800 relative">
+                                            <div class="text-xs font-mono text-slate-400 mb-2">3. CONDENSADOR</div>
+                                            <div class="text-3xl mb-2">❄️</div>
+                                            <div class="text-xl font-bold text-cyan-400 font-mono">{coolingFlow}% Flow</div>
+                                            <div class="text-[10px] text-slate-500 mt-1">Separação de Óleo & Gas</div>
+                                            <div class={`mt-3 mx-auto w-2 h-2 rounded-full ${coolingFlow > 0 ? 'bg-cyan-400' : 'bg-slate-700'}`}></div>
+                                        </div>
+
+                                        <div class="p-5 bg-slate-950/80 rounded-xl border border-slate-800 relative">
+                                            <div class="text-xs font-mono text-slate-400 mb-2">4. GERADOR SÍNGÁS</div>
+                                            <div class="text-3xl mb-2">⚡</div>
+                                            <div class="text-xl font-bold text-emerald-400 font-mono">{powerOutput} kW</div>
+                                            <div class="text-[10px] text-slate-500 mt-1">Injeção na Microrede</div>
+                                            <div class={`mt-3 mx-auto w-2 h-2 rounded-full ${powerOutput > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-700'}`}></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* SCADA Telemetry Chart */}
+                                <div class="glass-card p-6 rounded-2xl border border-slate-800">
+                                    <h3 class="text-sm font-mono font-bold uppercase text-slate-400 mb-4 flex items-center gap-2">
+                                        <i data-lucide="line-chart" class="w-4 h-4 text-emerald-400"></i>
+                                        Gráfico de Telemetria Industrial PID (Ao Vivo)
+                                    </h3>
+                                    <div class="h-64 w-full">
+                                        <canvas ref={chartRef}></canvas>
+                                    </div>
+                                </div>
+
+                                {/* Controls & Actuators Grid */}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="glass-card p-6 rounded-2xl space-y-5">
+                                        <div class="flex justify-between items-center">
+                                            <h4 class="font-bold text-white flex items-center gap-2">
+                                                <i data-lucide="flame" class="w-5 h-5 text-red-400"></i>
+                                                Controle do Queimador & Malha PID
+                                            </h4>
+                                            <div class="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-mono">
+                                                <button onClick={() => { setControlMode('AUTO'); addLog('Modo trocado para PID Automático'); }} class={`px-2 py-1 rounded ${controlMode === 'AUTO' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400'}`}>AUTO</button>
+                                                <button onClick={() => { setControlMode('MANUAL'); addLog('Modo trocado para Ajuste Manual'); }} class={`px-2 py-1 rounded ${controlMode === 'MANUAL' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}>MANUAL</button>
+                                            </div>
+                                        </div>
+
+                                        {controlMode === 'AUTO' ? (
+                                            <div>
+                                                <div class="flex justify-between text-xs font-mono mb-2">
+                                                    <span class="text-slate-400">Set-Point Temperatura Reator:</span>
+                                                    <span class="text-red-400 font-bold">{targetTemp} °C</span>
+                                                </div>
+                                                <input 
+                                                    type="range" min="300" max="500" step="5" value={targetTemp}
+                                                    disabled={isEStopped}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        setTargetTemp(val);
+                                                        addLog(`Set-point alterado para ${val}°C`);
+                                                    }}
+                                                    class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-red-500"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <div class="flex justify-between text-xs font-mono mb-2">
+                                                    <span class="text-slate-400">Potência Direta Queimador:</span>
+                                                    <span class="text-amber-400 font-bold">{burnerIntensity}%</span>
+                                                </div>
+                                                <input 
+                                                    type="range" min="0" max="100" value={burnerIntensity}
+                                                    disabled={isEStopped}
+                                                    onChange={(e) => {
+                                                        const val = Number(e.target.value);
+                                                        setBurnerIntensity(val);
+                                                        addLog(`Potência manual do queimador: ${val}%`);
+                                                    }}
+                                                    class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div class="glass-card p-6 rounded-2xl space-y-5">
+                                        <h4 class="font-bold text-white flex items-center gap-2">
+                                            <i data-lucide="rotate-cw" class="w-5 h-5 text-amber-400"></i>
+                                            Alimentador de Rosca & Resfriamento
+                                        </h4>
+
+                                        <div>
+                                            <div class="flex justify-between text-xs font-mono mb-2">
+                                                <span class="text-slate-400">Velocidade da Carga de Plástico:</span>
+                                                <span class="text-amber-400 font-bold">{feedRate} kg/h</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="0" max="100" value={feedRate}
+                                                disabled={isEStopped}
+                                                onChange={(e) => setFeedRate(Number(e.target.value))}
+                                                class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <div class="flex justify-between text-xs font-mono mb-2">
+                                                <span class="text-slate-400">Vazão do Condensador:</span>
+                                                <span class="text-cyan-400 font-bold">{coolingFlow}%</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="10" max="100" value={coolingFlow}
+                                                disabled={isEStopped}
+                                                onChange={(e) => setCoolingFlow(Number(e.target.value))}
+                                                class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Terminal SCADA Console */}
+                                <div class="glass-card p-5 rounded-2xl border border-slate-800">
+                                    <div class="flex justify-between items-center mb-3">
+                                        <span class="text-xs font-mono uppercase text-slate-400 flex items-center gap-2">
+                                            <i data-lucide="terminal" class="w-4 h-4 text-emerald-400"></i>
+                                            Console de Eventos Modbus TCP / SCADA
+                                        </span>
+                                        <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">MODBUS PORT 502 ACTIVE</span>
+                                    </div>
+                                    <div class="bg-slate-950 p-4 rounded-xl font-mono text-xs text-emerald-400 space-y-1 h-32 overflow-y-auto border border-slate-900">
+                                        {scadaLogs.map((log, idx) => (
+                                            <div key={idx}>{log}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {activeTab === 'logistics' && (
+                            <div class="max-w-5xl mx-auto space-y-8">
+                                <div>
+                                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold mb-2 border border-cyan-500/20">
+                                        <i data-lucide="truck" class="w-3.5 h-3.5"></i> Módulo Logístico & Inteligência Artificial
+                                    </div>
+                                    <h2 class="text-3xl font-extrabold text-white">Rotas Otimizadas & Triagem por IA</h2>
+                                    <p class="text-slate-400 text-sm mt-1">Otimização de roteamento de caminhões e validação de contaminação do plástico por Visão Computacional.</p>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    
+                                    {/* AI Computer Vision Plastic Inspector */}
+                                    <div class="glass-card p-6 rounded-2xl space-y-5">
+                                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                            <i data-lucide="scan" class="w-5 h-5 text-emerald-400"></i>
+                                            Inspeção de Qualidade por Visão Computacional (IA)
+                                        </h3>
+                                        <p class="text-xs text-slate-400">Selecione uma amostragem de plástico para testar o classificador de rede neural em tempo real:</p>
+
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <button 
+                                                onClick={() => runAiVisionScan('clean_pead')}
+                                                class={`p-3 rounded-xl border text-center transition ${selectedImageSample === 'clean_pead' ? 'border-emerald-500 bg-emerald-500/10' : 'border-slate-800 bg-slate-900'}`}
+                                            >
+                                                <div class="text-2xl mb-1">🧴</div>
+                                                <div class="text-xs font-bold text-white">Frascos PEAD</div>
+                                                <div class="text-[10px] text-slate-400">Limpos</div>
+                                            </button>
+
+                                            <button 
+                                                onClick={() => runAiVisionScan('mixed_dirty')}
+                                                class={`p-3 rounded-xl border text-center transition ${selectedImageSample === 'mixed_dirty' ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-900'}`}
+                                            >
+                                                <div class="text-2xl mb-1">🛍️</div>
+                                                <div class="text-xs font-bold text-white">Sacolas PEBD</div>
+                                                <div class="text-[10px] text-slate-400">Com Sujeira</div>
+                                            </button>
+
+                                            <button 
+                                                onClick={() => runAiVisionScan('pvc_hazard')}
+                                                class={`p-3 rounded-xl border text-center transition ${selectedImageSample === 'pvc_hazard' ? 'border-red-500 bg-red-500/10' : 'border-slate-800 bg-slate-900'}`}
+                                            >
+                                                <div class="text-2xl mb-1">⚠️</div>
+                                                <div class="text-xs font-bold text-white">Tubo PVC</div>
+                                                <div class="text-[10px] text-slate-400">Risco Cloro</div>
+                                            </button>
+                                        </div>
+
+                                        {isAnalyzingImage && (
+                                            <div class="p-6 bg-slate-950 rounded-xl text-center space-y-2 border border-slate-800">
+                                                <div class="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                                <div class="text-xs font-mono text-emerald-400">Processando rede neural convolucional...</div>
+                                            </div>
+                                        )}
+
+                                        {aiAnalysisResult && (
+                                            <div class={`p-5 rounded-xl border space-y-3 ${
+                                                aiAnalysisResult.status === 'APPROVED' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' :
+                                                aiAnalysisResult.status === 'WARNING' ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' :
+                                                'bg-red-500/10 border-red-500/30 text-red-300'
+                                            }`}>
+                                                <div class="flex justify-between items-center">
+                                                    <span class="font-bold text-sm flex items-center gap-1.5">
+                                                        {aiAnalysisResult.status === 'APPROVED' && '✅ LOTE APROVADO'}
+                                                        {aiAnalysisResult.status === 'WARNING' && '⚠️ APROVADO COM RESTRIÇÃO'}
+                                                        {aiAnalysisResult.status === 'REJECTED' && '🚨 LOTE REJEITADO'}
+                                                    </span>
+                                                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800">Confiança: {aiAnalysisResult.confidence}</span>
+                                                </div>
+                                                <div class="text-xs space-y-1">
+                                                    <div><strong>Polímero:</strong> {aiAnalysisResult.polymer}</div>
+                                                    <div><strong>Pureza:</strong> {aiAnalysisResult.purity}</div>
+                                                    <div><strong>Diagnóstico:</strong> {aiAnalysisResult.message}</div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Smart Collection Route Map Simulation */}
+                                    <div class="glass-card p-6 rounded-2xl space-y-4">
+                                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                            <i data-lucide="map-pin" class="w-5 h-5 text-cyan-400"></i>
+                                            Mapa de Coleta Inteligente & Ecopontos
+                                        </h3>
+                                        <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3 relative overflow-hidden">
+                                            <div class="flex justify-between items-center text-xs">
+                                                <span class="text-slate-400 font-mono">ROTA #402 - ZONA SUL</span>
+                                                <span class="text-emerald-400 font-bold">Otimização: 3.8 km economizados</span>
+                                            </div>
+
+                                            {/* Simulated Map Route Lines */}
+                                            <div class="space-y-2 text-xs">
+                                                <div class="p-2.5 bg-slate-900 rounded-lg flex justify-between items-center border border-slate-800">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                                        <span>Ecoponto Condomínio Verde (80kg acumulados)</span>
+                                                    </div>
+                                                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded">Pronto p/ Coleta</span>
+                                                </div>
+
+                                                <div class="p-2.5 bg-slate-900 rounded-lg flex justify-between items-center border border-slate-800">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                                        <span>Escola Municipal MutaLixo (120kg acumulados)</span>
+                                                    </div>
+                                                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded">Pronto p/ Coleta</span>
+                                                </div>
+
+                                                <div class="p-2.5 bg-slate-900 rounded-lg flex justify-between items-center border border-slate-800 opacity-60">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                                                        <span>Ecoponto Bairro Centro (15kg acumulados)</span>
+                                                    </div>
+                                                    <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">Aguardar Volume</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {activeTab === 'esg' && (
+                            <div class="max-w-5xl mx-auto space-y-8">
+                                <div>
+                                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-2 border border-emerald-500/20">
+                                        <i data-lucide="award" class="w-3.5 h-3.5"></i> Governança ESG & Cidades Inteligentes
+                                    </div>
+                                    <h2 class="text-3xl font-extrabold text-white">Relatório Certificado & Geração Distribuída</h2>
+                                    <p class="text-slate-400 text-sm mt-1">Comprovação de metas sustentáveis para empresas e ranking de bairros sustentáveis.</p>
+                                </div>
+
+                                {/* ESG KPI Cards */}
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800">
+                                        <div class="text-slate-400 text-xs font-semibold mb-1">Total de Plástico Desviado de Aterros</div>
+                                        <div class="text-3xl font-black text-emerald-400">142.8 <span class="text-base text-slate-400 font-normal">Toneladas</span></div>
+                                    </div>
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800">
+                                        <div class="text-slate-400 text-xs font-semibold mb-1">Energia Limpa Injetada na Cidade</div>
+                                        <div class="text-3xl font-black text-cyan-400">254.2 <span class="text-base text-slate-400 font-normal">MWh</span></div>
+                                    </div>
+                                    <div class="glass-card p-6 rounded-2xl border border-slate-800">
+                                        <div class="text-slate-400 text-xs font-semibold mb-1">Créditos de Carbono Emitidos</div>
+                                        <div class="text-3xl font-black text-amber-400">302.5 <span class="text-base text-slate-400 font-normal">tCO₂e</span></div>
+                                    </div>
+                                </div>
+
+                                {/* Neighborhood Ranking */}
+                                <div class="glass-card p-6 rounded-2xl space-y-4">
+                                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                        <i data-lucide="trophy" class="w-5 h-5 text-amber-400"></i>
+                                        Ranking de Bairros & Escolas Sustentáveis
+                                    </h3>
+                                    <div class="space-y-3">
+                                        <div class="p-4 bg-slate-900 rounded-xl flex justify-between items-center border border-slate-800">
+                                            <div class="flex items-center gap-3">
+                                                <span class="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-xs">1º</span>
+                                                <div>
+                                                    <div class="font-bold text-sm text-white">Bairro Jardim América</div>
+                                                    <div class="text-xs text-slate-400">1.250 kg descartados esta semana</div>
+                                                </div>
+                                            </div>
+                                            <span class="text-xs font-bold text-emerald-400">+12.500 MutaCoins</span>
+                                        </div>
+
+                                        <div class="p-4 bg-slate-900 rounded-xl flex justify-between items-center border border-slate-800">
+                                            <div class="flex items-center gap-3">
+                                                <span class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 font-bold flex items-center justify-center text-xs">2º</span>
+                                                <div>
+                                                    <div class="font-bold text-sm text-white">Escola Municipal Parque Verde</div>
+                                                    <div class="text-xs text-slate-400">980 kg descartados esta semana</div>
+                                                </div>
+                                            </div>
+                                            <span class="text-xs font-bold text-emerald-400">+9.800 MutaCoins</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {}
+                        {activeTab === 'ai_assistant' && (
+                            <div class="max-w-4xl mx-auto space-y-6">
+                                <div>
+                                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-2 border border-emerald-500/20">
+                                        <i data-lucide="bot" class="w-3.5 h-3.5"></i> Inteligência Artificial Generativa
+                                    </div>
+                                    <h2 class="text-3xl font-extrabold text-white">Assistente MutaLixo (Gemini API)</h2>
+                                    <p class="text-slate-400 text-sm mt-1">Tire dúvidas sobre qual plástico reciclar, reações da pirólise e rendimento de energia.</p>
+                                </div>
+
+                                {/* Chat Window */}
+                                <div class="glass-card rounded-2xl flex flex-col h-[500px] overflow-hidden border border-slate-800">
+                                    <div class="p-4 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
+                                            <span class="text-xs font-bold text-white">Gemini 3.1 Flash AI Online</span>
+                                        </div>
+                                        <span class="text-[10px] text-slate-500 font-mono">SUPORTE TÉCNICO & POPULAÇÃO</span>
+                                    </div>
+
+                                    {/* Messages list */}
+                                    <div class="flex-1 p-5 overflow-y-auto space-y-4">
+                                        {chatMessages.map((msg, idx) => (
+                                            <div key={idx} class={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div class={`max-w-[80%] p-4 rounded-2xl text-sm leading-relaxed ${
+                                                    msg.sender === 'user' 
+                                                        ? 'bg-emerald-500 text-slate-950 font-medium rounded-br-none' 
+                                                        : 'bg-slate-900 text-slate-200 border border-slate-800 rounded-bl-none'
+                                                }`}>
+                                                    {msg.text}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {isAiLoading && (
+                                            <div class="flex justify-start">
+                                                <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-xs text-slate-400 flex items-center gap-2">
+                                                    <div class="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                                                    Consultando IA Gemini MutaLixo...
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Input form */}
+                                    <div class="p-4 border-t border-slate-800 bg-slate-900/40 flex gap-3">
+                                        <input 
+                                            type="text" 
+                                            value={inputPrompt}
+                                            onChange={(e) => setInputPrompt(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                            placeholder="Ex: 'Pote de sorvete de PP pode ir na usina?' ou 'O que é pirólise?'"
+                                            class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+                                        />
+                                        <button 
+                                            onClick={handleSendMessage}
+                                            disabled={isAiLoading}
+                                            class="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl transition flex items-center gap-2"
+                                        >
+                                            <i data-lucide="send" class="w-4 h-4"></i>
+                                            Enviar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MutaLixoApp />);
+    </script>
+</body>
+</html>
